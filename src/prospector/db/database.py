@@ -204,10 +204,12 @@ class LeadRepository:
                 existing = result.scalar_one_or_none()
 
             if existing:
-                # Enriquece campos vazios
+                # Atualiza com dados frescos, mas protege o status comercial do Lead
                 data = _lead_to_orm_dict(lead)
                 for col, val in data.items():
-                    if val and not getattr(existing, col):
+                    if col in ("status", "notes"):  # Não sobrescreve o trabalho manual
+                        continue
+                    if val is not None and val != getattr(existing, col):
                         setattr(existing, col, val)
                 existing.updated_at = datetime.utcnow()
                 await session.commit()

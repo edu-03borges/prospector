@@ -139,7 +139,7 @@ class MapsScraper:
                 detail_page = await context.new_page()
                 try:
                     await detail_page.goto(href, wait_until="domcontentloaded", timeout=15000)
-                    await asyncio.sleep(1.0) # Aguarda render da sidebar
+                    await asyncio.sleep(2.5) # Aguarda render pesado da sidebar do maps
                     
                     # Seletor moderno de telefone via aria-label ou âncora tel:
                     phone_loc = detail_page.locator('button[aria-label^="Telefone:"]')
@@ -150,6 +150,16 @@ class MapsScraper:
                         phone_tel_loc = detail_page.locator('a[href^="tel:"]')
                         if await phone_tel_loc.count() > 0:
                             phone = await phone_tel_loc.first.get_attribute("href")
+                            
+                    # Fallback infalível via Regex no texto puro da tela (caso o DOM mude ou esteja oculto)
+                    if not phone:
+                        try:
+                            body_text = await detail_page.evaluate("document.body.innerText")
+                            phone_match = _PHONE_PATTERN.search(body_text)
+                            if phone_match:
+                                phone = phone_match.group(1)
+                        except Exception:
+                            pass
                     
                     # Seletor robusto de website
                     web_loc = detail_page.locator('a[aria-label^="Website:"]')
