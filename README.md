@@ -2,7 +2,7 @@
 
 > **Máquina de prospecção inteligente para estúdios criativos** — gravação, foto, vídeo, podcast e coworkings criativos.
 
-Automatiza a busca, enriquecimento, scoring e outreach de leads com scraping ético via Playwright/BeautifulSoup, banco SQLite, exportação multi-formato e um **cockpit interativo 100% no terminal**.
+Automatiza a busca, enriquecimento, scoring e outreach de leads com scraping ético via Playwright/BeautifulSoup, banco Supabase/Postgres, exportação multi-formato e um **cockpit interativo 100% no terminal**.
 
 ---
 
@@ -40,10 +40,21 @@ cp .env.example .env
 
 | Variável | Obrigatório | Onde obter |
 |----------|-------------|------------|
+| `DATABASE_URL` | Sim | URL de conexão Postgres do Supabase |
 | `HUNTER_API_KEY` | Não (estima e-mail pelo domínio) | [hunter.io](https://hunter.io/users/sign_up) (plano gratuito: 25/mês) |
 | `GROQ_API_KEY` | Não (melhora as mensagens de WhatsApp) | [console.groq.com](https://console.groq.com/keys) (gratuito) |
 
 > **Você pode rodar sem nenhuma chave.** A busca funciona 100% via scraper local e o fluxo principal opera só com recursos locais + WhatsApp Web.
+
+### Usar Supabase como banco principal
+
+Se quiser gravar os leads no Supabase, preencha no `.env`:
+
+```bash
+DATABASE_URL=postgresql://postgres:SUA_SENHA@db.SEU_PROJECT_REF.supabase.co:5432/postgres
+```
+
+Você pode colar a URL do Supabase exatamente como ela vem no painel. O Prospector converte `postgresql://...` para o driver async internamente. Na primeira conexão, o app cria a tabela `leads` automaticamente.
 
 ---
 
@@ -139,7 +150,6 @@ prospector/
 ├── config/
 │   └── config.yaml          # Configuração de busca, scoring e outreach
 ├── data/
-│   ├── prospector.db        # Banco SQLite (gerado automaticamente)
 │   └── exports/             # CSVs, Excels e JSONs gerados
 ├── src/prospector/
 │   ├── cli/

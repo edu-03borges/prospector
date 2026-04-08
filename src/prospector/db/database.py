@@ -1,4 +1,4 @@
-"""Camada de acesso ao banco de dados (SQLAlchemy async + SQLite)."""
+"""Camada de acesso ao banco de dados (SQLAlchemy async)."""
 
 from __future__ import annotations
 
@@ -24,10 +24,12 @@ from sqlalchemy import (
     select,
     update,
 )
+from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
+from sqlalchemy.pool import NullPool
 
-from prospector.config.settings import DATA_DIR, cfg, get_settings
+from prospector.config.settings import cfg, get_settings
 from prospector.models.lead import Lead, LeadStatus, SocialMedia, StudioType
 
 
@@ -90,14 +92,38 @@ async def get_engine():
     global _engine
     if _engine is None:
         settings = get_settings()
+        database_url = settings.database_url
+        url = make_url(database_url)
+        engine_kwargs: dict[str, Any] = {
+            "echo": False,
+            "pool_pre_ping": True,
+            "connect_args": {"statement_cache_size": 0},
+        }
+        if url.host and url.host.endswith(".pooler.supabase.com"):
+            engine_kwargs["poolclass"] = NullPool
         _engine = create_async_engine(
-            settings.database_url,
-            echo=False,
-            connect_args={"check_same_thread": False},
+            database_url,
+            **engine_kwargs,
         )
-        async with _engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-        logger.info(f"Banco conectado: {settings.database_url}")
+        try:
+            async with _engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+        except Exception as exc:
+            _engine = None
+            host = url.host or "host-desconhecido"
+            msg = str(exc)
+            if "DuplicatePreparedStatementError" in msg or "prepared statement" in msg.lower():
+                raise RuntimeError(
+                    "A conexao chegou no Supabase, mas o pooler rejeitou prepared statements. "
+                    "O cliente precisa desabilitar cache de statements para PgBouncer."
+                ) from exc
+            raise RuntimeError(
+                "Nao foi possivel conectar ao banco. "
+                f"Host atual: {host}. "
+                "Se for Supabase, copie a connection string inteira no botao Connect "
+                "e cole em DATABASE_URL; nao monte o host manualmente."
+            ) from exc
+        logger.info(f"Banco conectado: {database_url}")
     return _engine
 
 
@@ -185,7 +211,7 @@ def _lead_to_orm_dict(lead: Lead) -> dict:
 class LeadRepository:
     """CRUD básico para leads."""
 
-    async def upsert(self, lead: Lead) -> tuple[Lead, bool]:
+    async def upsert(self, lead: Lead, *, protect_manual_fields: bool = True) -> tuple[Lead, bool]:
         """Insere ou atualiza o lead. Retorna (lead_salvo, foi_criado)."""
         async with await get_session() as session:
             # Detecta duplicata por external_id ou (name + city)
@@ -208,8 +234,9 @@ class LeadRepository:
             if existing:
                 # Atualiza com dados frescos, mas protege o status comercial do Lead
                 data = _lead_to_orm_dict(lead)
+                protected_fields = {"status", "notes"} if protect_manual_fields else set()
                 for col, val in data.items():
-                    if col in ("status", "notes"):  # Não sobrescreve o trabalho manual
+                    if col in protected_fields:  # Não sobrescreve o trabalho manual
                         continue
                     if val is not None and val != getattr(existing, col):
                         setattr(existing, col, val)

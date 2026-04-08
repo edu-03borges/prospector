@@ -21,9 +21,10 @@ from rich.console import Console
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 from typer import Context
+from pathlib import Path
 
 from prospector.cli.terminal import run_terminal
-from prospector.config.settings import get_settings
+from prospector.config.settings import DATA_DIR, get_settings
 from prospector.core.scoring import classify_lead_priority, score_lead
 from prospector.db.database import LeadRepository
 from prospector.enrichment.enricher import LeadEnricher
@@ -51,7 +52,13 @@ def _setup_logger(debug: bool = False) -> None:
 
 def _run(coro):
     """Executa corrotina no loop de eventos."""
-    return asyncio.run(coro)
+    try:
+        return asyncio.run(coro)
+    except typer.Exit:
+        raise
+    except Exception as exc:
+        console.print(f"[bold red]Falha no comando:[/] {exc}")
+        raise typer.Exit(code=1)
 
 
 @app.callback(invoke_without_command=True)

@@ -36,10 +36,7 @@ class Settings(BaseSettings):
     groq_api_key: str = Field(default="", alias="GROQ_API_KEY")
 
     # Banco de dados
-    database_url: str = Field(
-        default=f"sqlite+aiosqlite:///{DATA_DIR}/prospector.db",
-        alias="DATABASE_URL",
-    )
+    database_url: str = Field(default="", alias="DATABASE_URL")
 
     # Geral
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
@@ -51,6 +48,20 @@ class Settings(BaseSettings):
         if v.upper() not in valid:
             raise ValueError(f"log_level deve ser um de {valid}")
         return v.upper()
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def normalize_database_url(cls, v: str) -> str:
+        raw = str(v or "").strip()
+        if not raw:
+            raise ValueError("DATABASE_URL é obrigatória e deve apontar para o Supabase/Postgres.")
+        if raw.startswith("postgresql://"):
+            raw = raw.replace("postgresql://", "postgresql+asyncpg://", 1)
+        elif raw.startswith("postgres://"):
+            raw = "postgresql+asyncpg://" + raw[len("postgres://"):]
+        if not raw.startswith("postgresql+asyncpg://"):
+            raise ValueError("DATABASE_URL deve usar Postgres/Supabase.")
+        return raw
 
     @property
     def has_hunter(self) -> bool:
