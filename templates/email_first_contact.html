@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>{{ studio_name }} — Proposta iMotio</title>
+  <style>
+    body { font-family: 'Segoe UI', Arial, sans-serif; background:#f5f5f5; color:#222; }
+    .container { max-width: 600px; margin: 40px auto; background:white;
+                  border-radius:12px; padding:36px; box-shadow:0 4px 24px rgba(0,0,0,.08); }
+    h1 { color: #6366f1; margin-bottom: 4px; }
+    .highlight { color:#6366f1; font-weight:600; }
+    .footer { margin-top:32px; font-size:.85rem; color:#666; border-top:1px solid #eee; padding-top:16px; }
+    .cta { display:inline-block; background:#6366f1; color:white; padding:12px 28px;
+           border-radius:8px; text-decoration:none; font-weight:600; margin-top:20px; }
+    .cta:hover { background: #4f46e5; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Olá, {{ studio_name }}! 👋</h1>
+    <p>Meu nome é <strong>{{ sender_name }}</strong> e desenvolvi uma tecnologia de visão computacional
+    chamada <span class="highlight">iMotio</span>, que usa a câmera de um computador comum para
+    <strong>corrigir postura e contar repetições em tempo real</strong> — sem nenhum wearable.</p>
+
+    <p>Vi que vocês possuem um espaço incrível em <strong>{{ studio_city }}</strong> e acredito que
+    essa solução seria um diferencial poderoso para os clientes do {{ studio_type }} de vocês.</p>
+
+    <p>Imagine uma TV ou monitor no seu espaço, dando feedback visual instantâneo para cada pessoa
+    que usa o espaço — enquanto você cuida do que importa.</p>
+
+    <a href="mailto:{{ reply_email }}" class="cta">Quero uma demonstração gratuita</a>
+
+    <div class="footer">
+      <p><strong>{{ sender_name }}</strong><br>
+      Fundador · iMotio | IA para Movimento Humano<br>
+      <a href="mailto:{{ reply_email }}">{{ reply_email }}</a></p>
+      <p style="font-size:.75rem;">
+        ⚠ Este e-mail foi enviado para {{ studio_name }} pois acreditamos que nossa tecnologia pode
+        ser relevante para seus clientes. Para não receber mais comunicações, responda com
+        <strong>"remover"</strong> ou clique aqui para ser removido da nossa lista.
+        Cumprindo a Lei Geral de Proteção de Dados (LGPD — Lei nº 13.709/2018).
+      </p>
+    </div>
+  </div>
+</body>
+</html>

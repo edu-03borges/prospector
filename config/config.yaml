@@ -1,0 +1,82 @@
+# Configuração principal do Prospector iMotio
+# Modifique este arquivo para ajustar o comportamento do sistema.
+
+search:
+  # Termos de busca base (combinados com localização)
+  default_keywords:
+    - "studio fitness"
+    - "studio de música"
+    - "estúdio fotográfico"
+    - "estúdio audiovisual"
+    - "estúdio de produção"
+    - "estúdio criativo"
+    - "coworking criativo"
+    - "estúdio de podcast"
+    - "estúdio de vídeo"
+
+  # Localização padrão (sobrescrito pelo CLI)
+  default_city: "Tubarão"
+  default_state: "SC"
+  default_radius_km: 30
+
+  # Qual tipo de studio focar (null = todos)
+  studio_types:
+    - gravacao
+    - musica
+    - foto
+    - video
+    - podcast
+    - criativo
+
+scraping:
+  # Quantos resultados buscar por consulta
+  max_results_per_query: 60
+  # Segundos de delay entre requisições (ético e evita ban)
+  request_delay_seconds: 2.5
+  # Quantas requisições paralelas (máx para não sobrecarregar)
+  max_concurrent_requests: 3
+  # User-Agent rotativo
+  rotate_user_agent: true
+  # Timeout em segundos por requisição
+  timeout_seconds: 30
+
+enrichment:
+  # Tentar encontrar e-mail via Hunter.io
+  use_hunter: true
+  # Buscar redes sociais via scraping
+  find_social_media: true
+  # Estimar e-mail se não encontrar (padrão contato@dominio.com)
+  estimate_email_if_missing: true
+
+scoring:
+  # Pesos para o score do lead (0-100)
+  weights:
+    has_email: 30
+    has_phone: 20
+    has_website: 15
+    has_instagram: 10
+    high_rating: 10        # 4.5+ estrelas
+    many_reviews: 10       # 50+ reviews
+    near_target_city: 5
+
+outreach:
+  # Máximo de e-mails por hora (anti-spam)
+  max_emails_per_hour: 15
+  # Delay mínimo entre envios de e-mail (segundos)
+  min_send_delay_seconds: 240
+  # Dias para follow-up automático
+  followup_after_days: 5
+  # Máximo de follow-ups por lead
+  max_followups: 2
+  # WhatsApp: máximo de msgs por hora
+  whatsapp_max_per_hour: 30
+  # WhatsApp: máximo por sessão (para não tomar ban)
+  whatsapp_max_per_session: 20
+  # WhatsApp: delay entre mensagens (segundos) — 30s é seguro
+  whatsapp_delay_seconds: 30
+
+database:
+  # Limpar leads duplicados automaticamente
+  auto_deduplicate: true
+  # Exportar backup automático a cada N operações
+  backup_every_n_ops: 100
