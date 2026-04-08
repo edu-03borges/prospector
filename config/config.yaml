@@ -60,13 +60,13 @@ scoring:
     near_target_city: 5
 
 outreach:
-  # Máximo de e-mails por hora (anti-spam)
-  max_emails_per_hour: 15
-  # Delay mínimo entre envios de e-mail (segundos)
-  min_send_delay_seconds: 240
-  # Dias para follow-up automático
+  # Nome do remetente usado nas mensagens padrão de WhatsApp
+  whatsapp_sender_name: "Fulanik"
+  # Nome da empresa usado nas mensagens padrão de WhatsApp
+  whatsapp_sender_company: "Elarin"
+  # Dias para follow-up automático no WhatsApp
   followup_after_days: 5
-  # Máximo de follow-ups por lead
+  # Máximo de follow-ups por lead via WhatsApp
   max_followups: 2
   # WhatsApp: máximo de msgs por hora
   whatsapp_max_per_hour: 30

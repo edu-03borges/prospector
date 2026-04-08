@@ -16,8 +16,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 ROOT = Path(__file__).resolve().parents[3]   # prospector/
 DATA_DIR = ROOT / "data"
 CONFIG_DIR = ROOT / "config"
-TEMPLATES_DIR = ROOT / "templates"
-
 # Garante que pastas existam
 DATA_DIR.mkdir(exist_ok=True)
 (DATA_DIR / "exports").mkdir(exist_ok=True)
@@ -36,13 +34,6 @@ class Settings(BaseSettings):
 
     # Groq AI (geração de mensagens — gratuito)
     groq_api_key: str = Field(default="", alias="GROQ_API_KEY")
-
-    # SMTP
-    smtp_host: str = Field(default="smtp.gmail.com", alias="SMTP_HOST")
-    smtp_port: int = Field(default=587, alias="SMTP_PORT")
-    smtp_user: str = Field(default="", alias="SMTP_USER")
-    smtp_password: str = Field(default="", alias="SMTP_PASSWORD")
-    smtp_from_name: str = Field(default="Prospector iMotio", alias="SMTP_FROM_NAME")
 
     # Banco de dados
     database_url: str = Field(
@@ -68,11 +59,6 @@ class Settings(BaseSettings):
     @property
     def has_groq(self) -> bool:
         return bool(self.groq_api_key)
-
-    @property
-    def has_smtp(self) -> bool:
-        return bool(self.smtp_user and self.smtp_password)
-
 
 @lru_cache
 def get_settings() -> Settings:

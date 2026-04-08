@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, Field, HttpUrl, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class LeadStatus(str, Enum):
@@ -43,8 +43,8 @@ class Lead(BaseModel):
 
     # Identificação
     id: Optional[int] = None
-    source: str = Field(..., description="Fonte: google_places | scraper | manual")
-    external_id: Optional[str] = None   # ID do Google Places, se disponível
+    source: str = Field(..., description="Fonte: maps_scraper | manual | import")
+    external_id: Optional[str] = None   # ID externo da fonte, se disponível
 
     # Core
     name: str
@@ -120,14 +120,3 @@ class SearchQuery(BaseModel):
     radius_km: float = 30.0
     studio_types: list[StudioType] = Field(default_factory=list)
     max_results: int = Field(default=60, ge=1, le=500)
-
-
-class EmailTemplate(BaseModel):
-    """Template de e-mail para outreach."""
-
-    name: str
-    subject: str
-    body_html: str
-    body_text: str
-    is_followup: bool = False
-    followup_day: int = 0

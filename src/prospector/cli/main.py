@@ -17,18 +17,18 @@ from typing import Optional
 
 import typer
 from loguru import logger
-from rich import print as rprint
 from rich.console import Console
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
 from rich.table import Table
+from typer import Context
 
+from prospector.cli.terminal import run_terminal
 from prospector.config.settings import get_settings
 from prospector.core.scoring import classify_lead_priority, score_lead
 from prospector.db.database import LeadRepository
 from prospector.enrichment.enricher import LeadEnricher
 from prospector.export.exporter import export_csv, export_excel, export_json
-from prospector.models.lead import Lead, LeadStatus, SearchQuery, StudioType
-from prospector.outreach.outreach import OutreachEngine
+from prospector.models.lead import Lead, LeadStatus, SearchQuery
 from prospector.outreach.whatsapp import WhatsAppEngine
 
 app = typer.Typer(
@@ -52,6 +52,17 @@ def _setup_logger(debug: bool = False) -> None:
 def _run(coro):
     """Executa corrotina no loop de eventos."""
     return asyncio.run(coro)
+
+
+@app.callback(invoke_without_command=True)
+def app_callback(
+    ctx: Context,
+    debug: bool = typer.Option(False, "--debug", help="Modo verboso"),
+) -> None:
+    """Abre o terminal interativo quando nenhum subcomando for informado."""
+    _setup_logger(debug)
+    if ctx.invoked_subcommand is None:
+        run_terminal()
 
 
 # ── Comando: search ───────────────────────────────────────────────────────────
@@ -82,11 +93,13 @@ async def _search_flow(city, state, radius, keywords_str, max_results, enrich, s
         max_results=max_results,
     )
 
-    # Sempre usa scraper ético via Playwright (100% gratuito)
     from prospector.scrapers.maps_scraper import MapsScraper
+
     searcher = MapsScraper()
+    source_used = "maps_scraper"
+
     if not silent:
-        console.print("[bold cyan]⚡[/] Usando scraper via Google Maps (sem API key)")
+        console.print(f"[bold cyan]⚡[/] Fonte de busca: [bold]{source_used}[/]")
 
     created_count = 0
     updated_count = 0
@@ -95,6 +108,8 @@ async def _search_flow(city, state, radius, keywords_str, max_results, enrich, s
     if silent:
         # Pula a interface Progress bar do Rich para não quebrar no Streamlit
         async for lead in searcher.search(query):
+            lead.city = lead.city or city
+            lead.state = lead.state or state
             lead.score = score_lead(lead, target_city=city)
             leads_buffer.append(lead)
 
@@ -121,6 +136,8 @@ async def _search_flow(city, state, radius, keywords_str, max_results, enrich, s
         task = progress.add_task(f"Buscando estúdios em {city}/{state}…", total=max_results)
 
         async for lead in searcher.search(query):
+            lead.city = lead.city or city
+            lead.state = lead.state or state
             # Score inicial
             lead.score = score_lead(lead, target_city=city)
             leads_buffer.append(lead)
@@ -277,53 +294,6 @@ async def _status_flow() -> None:
     console.print(table)
 
 
-# ── Comando: send ─────────────────────────────────────────────────────────────
-
-@app.command("send", help="📧 Envia e-mails para leads com score alto.")
-def cmd_send(
-    min_score: int = typer.Option(50, "--min-score", help="Score mínimo para envio"),
-    limit: int = typer.Option(10, "--limit", "-l", help="Máximo de e-mails por execução"),
-    dry_run: bool = typer.Option(False, "--dry-run", help="Simula sem enviar de verdade"),
-    debug: bool = typer.Option(False, "--debug"),
-) -> None:
-    _setup_logger(debug)
-    _run(_send_flow(min_score, limit, dry_run))
-
-
-async def _send_flow(min_score, limit, dry_run) -> None:
-    repo = LeadRepository()
-    engine = OutreachEngine()
-
-    leads = await repo.get_all(status=LeadStatus.NOVO, min_score=min_score, limit=limit)
-    leads_with_email = [l for l in leads if l.email]
-
-    if not leads_with_email:
-        console.print("[yellow]Nenhum lead com e-mail para enviar.[/]")
-        return
-
-    console.print(f"[bold]📧 {len(leads_with_email)} e-mail(s) a enviar[/] (dry_run={dry_run})")
-
-    for lead in leads_with_email:
-        if dry_run:
-            msg = await engine.generate_message_with_ai(lead)
-            console.print(f"\n[dim]─── Preview: {lead.name} ───[/dim]\n{msg[:300]}…\n")
-        else:
-            console.print(f"  Enviando para [bold]{lead.name}[/] <{lead.email}>…")
-            ok = await engine.send_email(lead)
-            icon = "✅" if ok else "❌"
-            console.print(f"  {icon}")
-
-
-# ── Comando: followup ─────────────────────────────────────────────────────────
-
-@app.command("followup", help="🔁 Envia follow-ups automáticos para leads pendentes.")
-def cmd_followup(debug: bool = typer.Option(False, "--debug")) -> None:
-    _setup_logger(debug)
-    engine = OutreachEngine()
-    sent = _run(engine.run_followup_campaign())
-    console.print(f"[bold green]✅ {sent} follow-up(s) enviados.[/]")
-
-
 # ── Comando: blacklist ────────────────────────────────────────────────────────
 
 @app.command("blacklist", help="🚫 Adiciona um lead à blacklist.")
@@ -339,17 +309,22 @@ def cmd_blacklist(
 
 # ── Comando: dashboard ────────────────────────────────────────────────────────
 
-@app.command("dashboard", help="🖥 Abre o dashboard visual no Streamlit.")
-def cmd_dashboard() -> None:
-    import subprocess, sys
-    from pathlib import Path
-    dash_path = Path(__file__).parent / "dashboard.py"
-    subprocess.run([sys.executable, "-m", "streamlit", "run", str(dash_path)], check=True)
+@app.command("dashboard", help="🖥 Alias legado para o terminal interativo.")
+def cmd_dashboard(debug: bool = typer.Option(False, "--debug")) -> None:
+    _setup_logger(debug)
+    console.print("[yellow]O dashboard web foi substituído pelo terminal interativo.[/]")
+    run_terminal()
+
+
+@app.command("terminal", help="🧭 Abre o cockpit interativo no terminal.")
+def cmd_terminal(debug: bool = typer.Option(False, "--debug")) -> None:
+    _setup_logger(debug)
+    run_terminal()
 
 
 # ── Comando: wa (WhatsApp automático) ────────────────────────────────────────
 
-@app.command("wa", help="💬 Envia mensagens via WhatsApp (Web ou Twilio).")
+@app.command("wa", help="💬 Envia mensagens via WhatsApp Web.")
 def cmd_wa(
     min_score: int = typer.Option(50, "--min-score", help="Score mínimo dos leads"),
     limit: int = typer.Option(10, "--limit", "-l", help="Máximo de mensagens por execução"),
@@ -360,11 +335,7 @@ def cmd_wa(
     debug: bool = typer.Option(False, "--debug"),
 ) -> None:
     """
-    Dispara mensagens de WhatsApp para leads com telefone.
-
-    Modos:
-    - Sem Twilio configurado: abre o WhatsApp Web no navegador (precisa estar logado).
-    - Com Twilio: envia via API oficial sem abrir browser.
+    Dispara mensagens de WhatsApp via WhatsApp Web para leads com telefone.
 
     Use --dry-run para visualizar as mensagens antes de enviar.
     """
@@ -391,6 +362,7 @@ async def _wa_flow(
         status = LeadStatus(status_str) if status_str else LeadStatus.NOVO
         leads = await repo.get_all(status=status, min_score=min_score, limit=limit)
         leads = [l for l in leads if l.phone]
+    leads = [lead for lead in leads if lead.status != LeadStatus.BLACKLIST]
 
     if not leads:
         console.print("[yellow]Nenhum lead com telefone encontrado para os filtros informados.[/]")
@@ -408,7 +380,7 @@ async def _wa_flow(
         if dry_run:
             console.print(f"[dim]─── Preview: {lead.name} ({lead.phone}) ───[/dim]")
             console.print(f"{msg}\n")
-            wa_link = engine._web.build_wa_url(lead.phone or "", msg)
+            wa_link = engine.generate_wa_links([lead], msg)[0]["link_whatsapp"]
             console.print(f"[blue]Link:[/] {wa_link[:80]}…\n")
         else:
             console.print(f"  Enviando para [bold]{lead.name}[/] ({lead.phone})…")
@@ -448,6 +420,7 @@ async def _wa_links_flow(
     repo = LeadRepository()
     leads = await repo.get_all(status=LeadStatus.NOVO, min_score=min_score, limit=limit)
     leads_with_phone = [l for l in leads if l.phone]
+    leads_with_phone = [lead for lead in leads_with_phone if lead.status != LeadStatus.BLACKLIST]
 
     if not leads_with_phone:
         console.print("[yellow]Nenhum lead com telefone encontrado.[/]")

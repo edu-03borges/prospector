@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import Optional, Sequence
+from typing import Any, Optional, Sequence
 
 from loguru import logger
 from sqlalchemy import (
@@ -18,14 +18,16 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     and_,
+    case,
     func,
+    or_,
     select,
     update,
 )
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
-from prospector.config.settings import DATA_DIR, get_settings
+from prospector.config.settings import DATA_DIR, cfg, get_settings
 from prospector.models.lead import Lead, LeadStatus, SocialMedia, StudioType
 
 
@@ -228,6 +230,9 @@ class LeadRepository:
         city: Optional[str] = None,
         min_score: int = 0,
         limit: int = 1000,
+        query_text: Optional[str] = None,
+        has_email: Optional[bool] = None,
+        has_phone: Optional[bool] = None,
     ) -> Sequence[Lead]:
         async with await get_session() as session:
             stmt = select(LeadORM).order_by(LeadORM.score.desc())
@@ -237,6 +242,25 @@ class LeadRepository:
                 stmt = stmt.where(func.lower(LeadORM.city) == city.lower())
             if min_score:
                 stmt = stmt.where(LeadORM.score >= min_score)
+            if query_text:
+                like_term = f"%{query_text.strip().lower()}%"
+                stmt = stmt.where(
+                    or_(
+                        func.lower(LeadORM.name).like(like_term),
+                        func.lower(func.coalesce(LeadORM.city, "")).like(like_term),
+                        func.lower(func.coalesce(LeadORM.state, "")).like(like_term),
+                        func.lower(func.coalesce(LeadORM.email, "")).like(like_term),
+                        func.lower(func.coalesce(LeadORM.website, "")).like(like_term),
+                    )
+                )
+            if has_email is True:
+                stmt = stmt.where(LeadORM.email.is_not(None), LeadORM.email != "")
+            elif has_email is False:
+                stmt = stmt.where(or_(LeadORM.email.is_(None), LeadORM.email == ""))
+            if has_phone is True:
+                stmt = stmt.where(LeadORM.phone.is_not(None), LeadORM.phone != "")
+            elif has_phone is False:
+                stmt = stmt.where(or_(LeadORM.phone.is_(None), LeadORM.phone == ""))
             stmt = stmt.limit(limit)
             result = await session.execute(stmt)
             return [_orm_to_lead(r) for r in result.scalars().all()]
@@ -253,9 +277,6 @@ class LeadRepository:
             values: dict = {"status": status.value, "updated_at": datetime.utcnow()}
             if notes is not None:
                 values["notes"] = notes
-            if status == LeadStatus.CONTATADO:
-                values["last_contacted_at"] = datetime.utcnow()
-                values["followup_count"] = LeadORM.followup_count + 1
             await session.execute(update(LeadORM).where(LeadORM.id == lead_id).values(**values))
             await session.commit()
 
@@ -268,13 +289,14 @@ class LeadRepository:
     async def get_pending_followups(self) -> Sequence[Lead]:
         async with await get_session() as session:
             now = datetime.utcnow()
+            max_followups = int(cfg("outreach.max_followups", 2))
             stmt = (
                 select(LeadORM)
                 .where(
                     and_(
                         LeadORM.next_followup_at <= now,
                         LeadORM.status == LeadStatus.CONTATADO.value,
-                        LeadORM.followup_count < 2,
+                        LeadORM.followup_count < max_followups,
                     )
                 )
                 .order_by(LeadORM.next_followup_at)
@@ -296,3 +318,135 @@ class LeadRepository:
             )
             await session.execute(stmt)
             await session.commit()
+
+    async def update_lead(
+        self,
+        lead_id: int,
+        *,
+        status: Optional[LeadStatus] = None,
+        notes: Optional[str] = None,
+        next_followup_at: Optional[datetime] = None,
+        clear_next_followup: bool = False,
+    ) -> None:
+        async with await get_session() as session:
+            values: dict[str, Any] = {"updated_at": datetime.utcnow()}
+            if status is not None:
+                values["status"] = status.value
+            if notes is not None:
+                values["notes"] = notes
+            if next_followup_at is not None:
+                values["next_followup_at"] = next_followup_at
+            elif clear_next_followup:
+                values["next_followup_at"] = None
+            await session.execute(update(LeadORM).where(LeadORM.id == lead_id).values(**values))
+            await session.commit()
+
+    async def delete(self, lead_id: int) -> bool:
+        async with await get_session() as session:
+            row = await session.get(LeadORM, lead_id)
+            if row is None:
+                return False
+            await session.delete(row)
+            await session.commit()
+            return True
+
+    async def mark_contacted(
+        self,
+        lead_id: int,
+        *,
+        notes: Optional[str] = None,
+        next_followup_at: Optional[datetime] = None,
+    ) -> None:
+        async with await get_session() as session:
+            values: dict[str, Any] = {
+                "status": LeadStatus.CONTATADO.value,
+                "last_contacted_at": datetime.utcnow(),
+                "updated_at": datetime.utcnow(),
+            }
+            if notes is not None:
+                values["notes"] = notes
+            if next_followup_at is not None:
+                values["next_followup_at"] = next_followup_at
+            await session.execute(update(LeadORM).where(LeadORM.id == lead_id).values(**values))
+            await session.commit()
+
+    async def register_followup_sent(
+        self,
+        lead_id: int,
+        *,
+        next_followup_at: Optional[datetime] = None,
+        notes: Optional[str] = None,
+    ) -> None:
+        async with await get_session() as session:
+            values: dict[str, Any] = {
+                "status": LeadStatus.CONTATADO.value,
+                "last_contacted_at": datetime.utcnow(),
+                "followup_count": LeadORM.followup_count + 1,
+                "updated_at": datetime.utcnow(),
+            }
+            if notes is not None:
+                values["notes"] = notes
+            values["next_followup_at"] = next_followup_at
+            await session.execute(update(LeadORM).where(LeadORM.id == lead_id).values(**values))
+            await session.commit()
+
+    async def get_pipeline_snapshot(self) -> dict[str, Any]:
+        async with await get_session() as session:
+            now = datetime.utcnow()
+            stmt = select(
+                func.count(LeadORM.id),
+                func.coalesce(func.avg(LeadORM.score), 0),
+                func.sum(
+                    case(
+                        (
+                            and_(LeadORM.email.is_not(None), LeadORM.email != ""),
+                            1,
+                        ),
+                        else_=0,
+                    )
+                ),
+                func.sum(
+                    case(
+                        (
+                            and_(LeadORM.phone.is_not(None), LeadORM.phone != ""),
+                            1,
+                        ),
+                        else_=0,
+                    )
+                ),
+                func.sum(
+                    case(
+                        (
+                            and_(
+                                LeadORM.status == LeadStatus.NOVO.value,
+                                LeadORM.score >= 75,
+                            ),
+                            1,
+                        ),
+                        else_=0,
+                    )
+                ),
+                func.sum(
+                    case(
+                        (
+                            and_(
+                                LeadORM.status == LeadStatus.CONTATADO.value,
+                                LeadORM.next_followup_at.is_not(None),
+                                LeadORM.next_followup_at <= now,
+                            ),
+                            1,
+                        ),
+                        else_=0,
+                    )
+                ),
+            )
+            result = await session.execute(stmt)
+            total, avg_score, with_email, with_phone, hot_new, followups_due = result.one()
+            return {
+                "total": total or 0,
+                "avg_score": round(float(avg_score or 0), 1),
+                "with_email": with_email or 0,
+                "with_phone": with_phone or 0,
+                "hot_new": hot_new or 0,
+                "followups_due": followups_due or 0,
+            }

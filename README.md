@@ -2,7 +2,7 @@
 
 > **Máquina de prospecção inteligente para estúdios criativos** — gravação, foto, vídeo, podcast e coworkings criativos.
 
-Automatiza a busca, enriquecimento, scoring e outreach de leads com **Google Places API**, scraping ético via Playwright/BeautifulSoup, banco SQLite, exportação multi-formato e dashboard Streamlit com mapa.
+Automatiza a busca, enriquecimento, scoring e outreach de leads com scraping ético via Playwright/BeautifulSoup, banco SQLite, exportação multi-formato e um **cockpit interativo 100% no terminal**.
 
 ---
 
@@ -16,11 +16,16 @@ Automatiza a busca, enriquecimento, scoring e outreach de leads com **Google Pla
 
 ```bash
 # Dentro da pasta prospector/
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -e ".[dev]"
 
 # Instala o navegador para o scraper (apenas na primeira vez)
 playwright install chromium
 ```
+
+> No Ubuntu/Debian com Python 3.12+, não use `pip install` no ambiente global.
+> Se a `.venv` já existir, basta rodar `source .venv/bin/activate`.
 
 ### 3. Configurar variáveis de ambiente
 
@@ -31,32 +36,48 @@ cp .env.example .env
 
 ---
 
-## ⚙️ Configuração de APIs
+## ⚙️ Configuração Opcional
 
 | Variável | Obrigatório | Onde obter |
 |----------|-------------|------------|
-| `GOOGLE_PLACES_API_KEY` | Não (usa scraper como fallback) | [Google Cloud Console](https://console.cloud.google.com/) → Places API |
 | `HUNTER_API_KEY` | Não (estima e-mail pelo domínio) | [hunter.io](https://hunter.io/users/sign_up) (plano gratuito: 25/mês) |
-| `GROQ_API_KEY` | Não (usa template padrão) | [console.groq.com](https://console.groq.com/keys) (gratuito) |
-| `SMTP_USER` + `SMTP_PASSWORD` | Só para envio de e-mails | Gmail: ative *App Password* em Segurança |
+| `GROQ_API_KEY` | Não (melhora as mensagens de WhatsApp) | [console.groq.com](https://console.groq.com/keys) (gratuito) |
 
-> **Você pode rodar sem nenhuma chave.** O sistema usa scraper ético como fallback para busca e templates embutidos para e-mails.
+> **Você pode rodar sem nenhuma chave.** A busca funciona 100% via scraper local e o fluxo principal opera só com recursos locais + WhatsApp Web.
 
 ---
 
-## 🖥 Uso — Linha de Comando
+## 🖥 Uso — Terminal Interativo
 
-### Buscar leads de estúdios
+### Abrir o cockpit principal
 
 ```bash
-# Busca básica (usa scraper se sem API key)
+.venv/bin/prospector
+# ou
+.venv/bin/prospector terminal
+```
+
+O terminal interativo concentra:
+- visão geral do pipeline com KPIs
+- fila prioritária de leads
+- follow-ups pendentes
+- busca de novos leads
+- atualização de status e notas
+- enriquecimento de leads salvos
+- campanhas e follow-ups de WhatsApp
+- exportação para CSV, Excel e JSON
+
+### Buscar leads de estúdios via subcomando
+
+```bash
+# Busca via scraper local
 prospector search --city "Tubarão" --state SC --radius 30
 
-# Com mais opções
-prospector search -c "Belo Horizonte" -s MG -r 50 --max 100 --keywords "studio fitness,podcast"
+# Busca com palavras-chave específicas
+prospector search -c "Rio de Janeiro" -s RJ --keywords "studio fitness,podcast"
 
-# Sem enriquecer (mais rápido)
-prospector search -c "Rio de Janeiro" -s RJ --no-enrich
+# Com mais opções
+prospector search -c "Curitiba" -s PR -r 40 --max 80 --keywords "estúdio de podcast,produtora de vídeo"
 ```
 
 ### Listar leads salvos
@@ -81,21 +102,20 @@ prospector export --format excel --min-score 40 --output minha_lista.xlsx
 prospector export --format json
 ```
 
-### Enviar e-mails em massa
+### Disparar WhatsApp
 
 ```bash
-# Preview sem enviar
-prospector send --min-score 60 --limit 5 --dry-run
+# Preview sem abrir o WhatsApp
+prospector wa --min-score 60 --limit 5 --dry-run
 
-# Enviar de verdade (garanta que SMTP_USER e SMTP_PASSWORD estão no .env)
-prospector send --min-score 60 --limit 10
+# Disparo real via WhatsApp Web
+prospector wa --min-score 60 --limit 10
+
+# Follow-ups pendentes
+prospector wa --followup --limit 10
 ```
 
-### Follow-ups automáticos
-
-```bash
-prospector followup
-```
+O texto padrão do WhatsApp usa `outreach.whatsapp_sender_name` e `outreach.whatsapp_sender_company` em [config/config.yaml](/home/desenv06/Documentos/python/prospector/config/config.yaml).
 
 ### Blacklist
 
@@ -103,24 +123,12 @@ prospector followup
 prospector blacklist "Studio XYZ" "Tubarão"
 ```
 
-### Dashboard Visual
+### Operar tudo sem dashboard web
 
 ```bash
+# o comando legado agora redireciona para o terminal
 prospector dashboard
-# Ou diretamente:
-streamlit run src/prospector/cli/dashboard.py
 ```
-
----
-
-## 📊 Dashboard Streamlit
-
-O dashboard inclui:
-- **KPIs** de pipeline (total, novos, contatados, qualificados, convertidos)
-- **Tabela** de leads com filtros e links de WhatsApp clicáveis
-- **Gráficos** de distribuição por status, tipo de estúdio e score
-- **Mapa interativo** com pins georreferenciados
-- **Busca integrada** no painel lateral (sem sair do dashboard)
 
 ---
 
@@ -136,7 +144,7 @@ prospector/
 ├── src/prospector/
 │   ├── cli/
 │   │   ├── main.py          # CLI Typer (ponto de entrada)
-│   │   └── dashboard.py     # Dashboard Streamlit
+│   │   └── terminal.py      # Cockpit interativo via terminal
 │   ├── config/
 │   │   └── settings.py      # Configurações via .env e config.yaml
 │   ├── core/
@@ -150,12 +158,9 @@ prospector/
 │   ├── models/
 │   │   └── lead.py          # Modelos Pydantic e enums
 │   ├── outreach/
-│   │   └── outreach.py      # SMTP + Groq AI + follow-up
+│   │   └── whatsapp.py      # WhatsApp Web + follow-up
 │   └── scrapers/
-│       ├── google_places.py # Google Places API (New)
-│       └── maps_scraper.py  # Playwright scraper (fallback)
-└── templates/
-    └── email_first_contact.html  # Template de e-mail HTML
+│       └── maps_scraper.py  # Playwright scraper principal
 ```
 
 ---
@@ -187,10 +192,10 @@ O sistema calcula um **score de 0 a 100** para cada lead baseado em critérios c
 
 **Boas práticas obrigatórias:**
 1. **Use apenas para pessoa jurídica** — contato B2B com estúdios é legítimo sob LGPD.
-2. **Inclua opt-out** em todos os e-mails (já incluso nos templates).
+2. **Inclua opt-out** nas mensagens e respeite pedidos de remoção.
 3. **Não compartilhe dados** com terceiros.
 4. **Respeite pedidos de remoção** — use `prospector blacklist "Nome" "Cidade"` imediatamente.
-5. **Delay entre envios** — o limite de 15 e-mails/hora previne spam e protege sua reputação.
+5. **Delay entre envios** — respeite os limites do WhatsApp para reduzir risco de bloqueio.
 
 ---
 
